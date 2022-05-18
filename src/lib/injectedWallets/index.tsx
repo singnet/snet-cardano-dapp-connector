@@ -1,10 +1,39 @@
-import { supportedInjectableWallets } from "../../utils/supportedWallets";
+import {
+  Avatar,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+} from "@mui/material";
+import { supportingInjectableWallets } from "../../utils/supportedWallets";
 import useInjectableWalletHook from "./hooks/useInjectableWalletHook";
 
 const InjectedWallets = () => {
-  const {} = useInjectableWalletHook();
+  const { supportedWallets, connectWallet } = useInjectableWalletHook(
+    supportingInjectableWallets
+  );
 
-  return <div>Display wallets</div>;
+  return (
+    <List dense>
+      {supportedWallets.map((wallet) => {
+        return (
+          <ListItem
+            sx={{ borderBottom: "1px solid #f6f6f6" }}
+            key={wallet.walletIdentifier}
+          >
+            <ListItemButton
+              onClick={() => {
+                connectWallet(wallet.walletIdentifier);
+              }}
+            >
+              <ListItemText primary={wallet.name} />
+              <Avatar src={wallet.icon} />
+            </ListItemButton>
+          </ListItem>
+        );
+      })}
+    </List>
+  );
 };
 
 export default InjectedWallets;
