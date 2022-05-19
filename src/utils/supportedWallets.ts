@@ -1,3 +1,1 @@
-export const supportedInjectableWallets = {
-  NAMI: "NAMI",
-};
+export const supportingInjectableWallets = ["NAMI"];
