@@ -9,11 +9,13 @@ import {
   LinearFee,
   MultiAsset,
   ScriptHash,
+  Transaction,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
   TransactionOutputBuilder,
   TransactionUnspentOutput,
   TransactionUnspentOutputs,
+  TransactionWitnessSet,
   Value,
 } from "@emurgo/cardano-serialization-lib-asmjs";
 import AssetFingerprint from "@emurgo/cip14-js";
@@ -169,12 +171,7 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
         const utxo = TransactionUnspentOutput.from_bytes(
           Buffer.from(rawUtxo, "hex")
         );
-        const input = utxo.input();
-
-        // const txid = Buffer.from(
-        //   input.transaction_id().to_bytes(),
-        //   "utf8"
-        // ).toString("hex");
+        const input: any = utxo.input();
 
         const txid: any = Buffer.from(
           input.transaction_id().to_bytes(),
@@ -193,19 +190,19 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
           // console.log(`${N} Multiassets in the UTXO`)
 
           for (let i = 0; i < N; i++) {
-            const policyId = keys.get(i);
+            const policyId: any = keys.get(i);
             const policyIdHex = Buffer.from(
               policyId.to_bytes(),
               "utf8"
             ).toString("hex");
             // console.log(`policyId: ${policyIdHex}`)
             const assets = multiasset.get(policyId);
-            const assetNames = assets.keys();
-            const K = assetNames.len();
+            const assetNames = assets?.keys();
+            const K: any = assetNames?.len();
             // console.log(`${K} Assets in the Multiasset`)
 
             for (let j = 0; j < K; j++) {
-              const assetName = assetNames.get(j);
+              const assetName: any = assetNames?.get(j);
               const assetNameString = Buffer.from(
                 assetName.name(),
                 "utf8"
@@ -216,8 +213,6 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
               ).toString("hex");
               const multiassetAmt = multiasset.get_asset(policyId, assetName);
               multiAssetStr += `+ ${multiassetAmt.to_str()} + ${policyIdHex}.${assetNameHex} (${assetNameString})`;
-              // console.log(assetNameString)
-              // console.log(`Asset Name: ${assetNameHex}`)
             }
           }
         }
@@ -239,15 +234,86 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     }
   };
 
-  const getTxUnspentOutputs = async () => {
-    let txOutputs = TransactionUnspentOutputs.new();
-    for (const utxo of this.state.Utxos) {
-      txOutputs.add(utxo.TransactionUnspentOutput);
+  const transferTokens = async (
+    recepientWalletAddressess: string[],
+    walletAddress: string,
+    assetNameHex: string,
+    assetAmountToSend: string,
+    assetPolicyIdHex: string
+  ) => {
+    const txBuilder = await initTransactionBuilder();
+    const shelleyChangeAddress = Address.from_bech32(walletAddress);
+
+    let txOutputBuilder: any = TransactionOutputBuilder.new();
+    for (const recepientWalletAddress of recepientWalletAddressess) {
+      txOutputBuilder = txOutputBuilder.with_address(
+        Address.from_bech32(recepientWalletAddress)
+      );
     }
-    return txOutputs;
+
+    txOutputBuilder = txOutputBuilder.next();
+
+    let multiAsset = MultiAsset.new();
+    let assets = Assets.new();
+    assets.insert(
+      AssetName.new(Buffer.from(assetNameHex, "hex")), // Asset Name
+      BigNum.from_str(assetAmountToSend) // How much to send
+    );
+    multiAsset.insert(
+      ScriptHash.from_bytes(Buffer.from(assetPolicyIdHex, "hex")), // PolicyID
+      assets
+    );
+
+    txOutputBuilder = txOutputBuilder.with_asset_and_min_required_coin(
+      multiAsset,
+      BigNum.from_str(protocolParams.coinsPerUtxoWord)
+    );
+    const txOutput = txOutputBuilder.build();
+
+    txBuilder.add_output(txOutput);
+
+    // Find the available UTXOs in the wallet and
+    // us them as Inputs
+    const txUnspentOutputs = await getTxUnspentOutputs();
+    txBuilder.add_inputs_from(txUnspentOutputs, 3);
+
+    // set the time to live - the absolute slot value before the tx becomes invalid
+    // txBuilder.set_ttl(51821456);
+
+    // calculate the min fee required and send any change to an address
+    txBuilder.add_change_if_needed(shelleyChangeAddress);
+
+    // once the transaction is ready, we build it to get the tx body without witnesses
+    const txBody = txBuilder.build();
+
+    // Tx witness
+    const transactionWitnessSet = TransactionWitnessSet.new();
+
+    const tx: any = Transaction.new(
+      txBody,
+      TransactionWitnessSet.from_bytes(transactionWitnessSet.to_bytes())
+    );
+
+    let txVkeyWitnesses = await injectedWallet.signTx(
+      Buffer.from(tx.to_bytes(), "utf8").toString("hex"),
+      true
+    );
+    txVkeyWitnesses = TransactionWitnessSet.from_bytes(
+      Buffer.from(txVkeyWitnesses, "hex")
+    );
+
+    transactionWitnessSet.set_vkeys(txVkeyWitnesses.vkeys());
+
+    const signedTx: any = Transaction.new(tx.body(), transactionWitnessSet);
+
+    const submittedTxHash = await injectedWallet.submitTx(
+      Buffer.from(signedTx.to_bytes(), "utf8").toString("hex")
+    );
+
+    return submittedTxHash;
   };
 
-  const buildSendTokenTransaction = async (
+  const transferToken = async (
     recepientWalletAddress: string,
     walletAddress: string,
     assetNameHex: string,
@@ -283,7 +349,7 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
 
     // Find the available UTXOs in the wallet and
     // us them as Inputs
-    const txUnspentOutputs = await this.getTxUnspentOutputs();
+    const txUnspentOutputs = await getTxUnspentOutputs();
     txBuilder.add_inputs_from(txUnspentOutputs, 3);
 
     // set the time to live - the absolute slot value before the tx becomes invalid
@@ -298,12 +364,12 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     // Tx witness
     const transactionWitnessSet = TransactionWitnessSet.new();
 
-    const tx = Transaction.new(
+    const tx: any = Transaction.new(
       txBody,
       TransactionWitnessSet.from_bytes(transactionWitnessSet.to_bytes())
     );
 
-    let txVkeyWitnesses = await this.API.signTx(
+    let txVkeyWitnesses = await injectedWallet.signTx(
       Buffer.from(tx.to_bytes(), "utf8").toString("hex"),
       true
     );
@@ -313,16 +379,13 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
 
     transactionWitnessSet.set_vkeys(txVkeyWitnesses.vkeys());
 
-    const signedTx = Transaction.new(tx.body(), transactionWitnessSet);
+    const signedTx: any = Transaction.new(tx.body(), transactionWitnessSet);
 
-    const submittedTxHash = await this.API.submitTx(
+    const submittedTxHash = await injectedWallet.submitTx(
       Buffer.from(signedTx.to_bytes(), "utf8").toString("hex")
     );
-    console.log(submittedTxHash);
-    this.setState({ submittedTxHash });
 
-    // const txBodyCborHex_unsigned = Buffer.from(txBody.to_bytes(), "utf8").toString("hex");
-    // this.setState({txBodyCborHex_unsigned, txBody})
+    return submittedTxHash;
   };
 
   const connectWallet = async (walletName: string) => {
@@ -343,6 +406,8 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     getChangeAddress,
     getTokensAndBalance,
     supportedWallets,
+    transferToken,
+    transferTokens,
   };
 };
 
