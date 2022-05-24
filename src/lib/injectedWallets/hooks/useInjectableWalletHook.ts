@@ -293,7 +293,7 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
         }
       }
 
-      console.log("outputs: ", Buffer.from(outputs.to_bytes()).toString("hex"));
+      return outputs;
     } catch (error) {
       console.log("Error on transferTokens: ", error);
       throw error;
