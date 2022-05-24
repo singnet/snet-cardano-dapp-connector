@@ -7,11 +7,14 @@ import {
   Assets,
   BigNum,
   LinearFee,
+  min_ada_required,
   MultiAsset,
   ScriptHash,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
+  TransactionOutput,
   TransactionOutputBuilder,
+  TransactionOutputs,
   TransactionUnspentOutput,
   TransactionUnspentOutputs,
   Value,
@@ -165,9 +168,11 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
       console.log("Connecting wallet: ", connectingWallet);
       injectedWallet = await window.cardano[connectingWallet].enable();
 
+      const recepients = [await getChangeAddress()];
+
       await getTokensAndBalance();
       await getChangeAddress();
-      await transferTokens();
+      await transferTokens(recepients, "0");
     } catch (error) {
       throw error;
     }
@@ -191,10 +196,104 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     }
   };
 
-  const transferTokens = async () => {
+  const makeMultiAsset = (assets: any) => {
+    let AssetsMap: any = {};
+    for (let asset of assets) {
+      let [policy, assetName] = asset.unit.split(".");
+      let quantity = asset.quantity;
+      if (!Array.isArray(AssetsMap[policy])) {
+        AssetsMap[policy] = [];
+      }
+      AssetsMap[policy].push({
+        unit: Buffer.from(assetName, "ascii").toString("hex"),
+        quantity: quantity,
+      });
+    }
+
+    let multiAsset = MultiAsset.new();
+
+    for (const policy in AssetsMap) {
+      const scriptHash = ScriptHash.from_bytes(Buffer.from(policy, "hex"));
+      const assets = Assets.new();
+
+      const _assets = AssetsMap[policy];
+
+      for (const asset of _assets) {
+        const assetName = AssetName.new(Buffer.from(asset.unit, "hex"));
+        const bigNum = BigNum.from_str(asset.quantity.toString());
+
+        _assets.insert(assetName, bigNum);
+      }
+
+      multiAsset.insert(scriptHash, assets);
+    }
+
+    return multiAsset;
+  };
+
+  const transferTokens = async (recipients: string[], amount: string) => {
     try {
       const utxos = await getUtxos();
-      console.log("Utxos: ", utxos);
+      let outputs = TransactionOutputs.new();
+
+      for (let recipient of recipients) {
+        let lovelace = Math.floor((recipient.amount || 0) * 1000000).toString();
+        let ReceiveAddress = recipient.address;
+        let multiAsset = makeMultiAsset(recipient?.assets || []);
+        let mintedAssets = [];
+
+        let outputValue = Value.new(BigNum.from_str(lovelace));
+        let minAdaMint = Value.new(BigNum.from_str("0"));
+
+        if ((recipient?.assets || []).length > 0) {
+          outputValue.set_multiasset(multiAsset);
+          let minAda = min_ada_required(
+            outputValue,
+            BigNum.from_str(protocolParameter.minUtxo)
+          );
+
+          if (this.S.BigNum.from_str(lovelace).compare(minAda) < 0)
+            outputValue.set_coin(minAda);
+        }
+        (recipient?.mintedAssets || []).map((asset) => {
+          minting += 1;
+          mintedAssetsArray.push({
+            ...asset,
+            address: recipient.address,
+          });
+        });
+
+        if (parseInt(outputValue.coin().to_str()) > 0) {
+          outputValues[recipient.address] = outputValue;
+        }
+        if ((recipient.mintedAssets || []).length > 0) {
+          minAdaMint = this.S.min_ada_required(
+            mintedAssets,
+            this.S.BigNum.from_str(protocolParameter.minUtxo)
+          );
+
+          let requiredMintAda = this.S.Value.new(this.S.BigNum.from_str("0"));
+          requiredMintAda.set_coin(minAdaMint);
+          if (outputValue.coin().to_str() == 0) {
+            outputValue = requiredMintAda;
+          } else {
+            outputValue = outputValue.checked_add(requiredMintAda);
+          }
+        }
+        if (ReceiveAddress != PaymentAddress)
+          costValues[ReceiveAddress] = outputValue;
+        outputValues[ReceiveAddress] = outputValue;
+        if (parseInt(outputValue.coin().to_str()) > 0) {
+          outputs.add(
+            this.S.TransactionOutput.new(
+              this.S.Address.from_bech32(ReceiveAddress),
+              outputValue
+            )
+          );
+        }
+      }
+
+      console.log("outputs: ", Buffer.from(outputs.to_bytes()).toString("hex"));
     } catch (error) {
       console.log("Error on transferTokens: ", error);
       throw error;
