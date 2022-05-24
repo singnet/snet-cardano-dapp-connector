@@ -252,7 +252,7 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
             BigNum.from_str(protocolParameter.minUtxo)
           );
 
-          if (this.S.BigNum.from_str(lovelace).compare(minAda) < 0)
+          if (BigNum.from_str(lovelace).compare(minAda) < 0)
             outputValue.set_coin(minAda);
         }
         (recipient?.mintedAssets || []).map((asset) => {
@@ -267,12 +267,12 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
           outputValues[recipient.address] = outputValue;
         }
         if ((recipient.mintedAssets || []).length > 0) {
-          minAdaMint = this.S.min_ada_required(
+          minAdaMint = min_ada_required(
             mintedAssets,
-            this.S.BigNum.from_str(protocolParameter.minUtxo)
+            S.BigNum.from_str(protocolParameter.minUtxo)
           );
 
-          let requiredMintAda = this.S.Value.new(this.S.BigNum.from_str("0"));
+          let requiredMintAda = Value.new(BigNum.from_str("0"));
           requiredMintAda.set_coin(minAdaMint);
           if (outputValue.coin().to_str() == 0) {
             outputValue = requiredMintAda;
@@ -285,8 +285,8 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
         outputValues[ReceiveAddress] = outputValue;
         if (parseInt(outputValue.coin().to_str()) > 0) {
           outputs.add(
-            this.S.TransactionOutput.new(
-              this.S.Address.from_bech32(ReceiveAddress),
+            TransactionOutput.new(
+              Address.from_bech32(ReceiveAddress),
               outputValue
             )
           );
