@@ -10,6 +10,7 @@ import {
   min_ada_required,
   MultiAsset,
   ScriptHash,
+  Transaction,
   TransactionBuilder,
   TransactionBuilderConfigBuilder,
   TransactionOutput,
@@ -17,6 +18,7 @@ import {
   TransactionOutputs,
   TransactionUnspentOutput,
   TransactionUnspentOutputs,
+  TransactionWitnessSet,
   Value,
 } from "@emurgo/cardano-serialization-lib-asmjs";
 import AssetFingerprint from "@emurgo/cip14-js";
@@ -231,9 +233,8 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     return multiAsset;
   };
 
-  const transferTokens = async (recipients: string[], amount: string) => {
+  const makeOutputs = (recipients: string[]) => {
     try {
-      const utxos = await getUtxos();
       let outputs = TransactionOutputs.new();
 
       for (let recipient of recipients) {
@@ -294,6 +295,38 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
       }
 
       return outputs;
+    } catch (error) {
+      console.log("Error on makeOutputs: ", error);
+      throw error;
+    }
+  };
+
+  const transferTokens = async (recipients: string[], amount: string) => {
+    try {
+      const utxos = await getUtxos();
+      const txOutputs = makeOutputs(recipients);
+
+      const txBuilder = await initTransactionBuilder();
+      txBuilder.add_output(txOutputs);
+      txBuilder.add_inputs_from(utxos, 3);
+      const txBody = txBuilder.build();
+
+      let txVkeyWitnesses = await injectedWallet.signTx(
+        Buffer.from(txBody.to_bytes(), "utf8").toString("hex"),
+        true
+      );
+      txVkeyWitnesses = TransactionWitnessSet.from_bytes(
+        Buffer.from(txVkeyWitnesses, "hex")
+      );
+
+      const signedTx = Transaction.new(txBuilder.body(), transactionWitnessSet);
+
+      const submittedTxHash = await injectedWallet.submitTx(
+        Buffer.from(signedTx.to_bytes(), "utf8").toString("hex")
+      );
+
+      console.log("Submitted transaction: ", submittedTxHash);
+      return submittedTxHash;
     } catch (error) {
       console.log("Error on transferTokens: ", error);
       throw error;
