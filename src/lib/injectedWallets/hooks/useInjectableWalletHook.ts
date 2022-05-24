@@ -3,13 +3,43 @@ import toLower from "lodash/toLower";
 import isNil from "lodash/isNil";
 import {
   Address,
+  AssetName,
+  Assets,
   BigNum,
+  LinearFee,
+  min_ada_required,
+  MultiAsset,
+  ScriptHash,
+  Transaction,
+  TransactionBuilder,
+  TransactionBuilderConfigBuilder,
+  TransactionOutput,
+  TransactionOutputBuilder,
+  TransactionOutputs,
+  TransactionUnspentOutput,
+  TransactionUnspentOutputs,
+  TransactionWitnessSet,
   Value,
 } from "@emurgo/cardano-serialization-lib-asmjs";
 import AssetFingerprint from "@emurgo/cip14-js";
-import { fromCogs, HexToAscii } from "../../../utils/functions";
+import { HexToAscii } from "../../../utils/functions";
 
 let injectedWallet: any = undefined;
+
+const protocolParams = {
+  linearFee: {
+    minFeeA: "44",
+    minFeeB: "155381",
+  },
+  minUtxo: "34482",
+  poolDeposit: "500000000",
+  keyDeposit: "2000000",
+  maxValSize: 5000,
+  maxTxSize: 16384,
+  priceMem: 0.0577,
+  priceStep: 0.0000721,
+  coinsPerUtxoWord: "34482",
+};
 
 const useInjectableWalletHook = (supportingWallets: string[]) => {
   const [supportedWallets, setSupportedWallets] = useState<any[]>([]);
@@ -113,15 +143,192 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     }
   };
 
+  const initTransactionBuilder = async () => {
+    const txBuilder = TransactionBuilder.new(
+      TransactionBuilderConfigBuilder.new()
+        .fee_algo(
+          LinearFee.new(
+            BigNum.from_str(protocolParams.linearFee.minFeeA),
+            BigNum.from_str(protocolParams.linearFee.minFeeB)
+          )
+        )
+        .pool_deposit(BigNum.from_str(protocolParams.poolDeposit))
+        .key_deposit(BigNum.from_str(protocolParams.keyDeposit))
+        .coins_per_utxo_word(BigNum.from_str(protocolParams.coinsPerUtxoWord))
+        .max_value_size(protocolParams.maxValSize)
+        .max_tx_size(protocolParams.maxTxSize)
+        .prefer_pure_change(true)
+        .build()
+    );
+
+    return txBuilder;
+  };
+
   const connectWallet = async (walletName: string) => {
     try {
       const connectingWallet = toLower(walletName);
       console.log("Connecting wallet: ", connectingWallet);
       injectedWallet = await window.cardano[connectingWallet].enable();
 
+      const recepients = [await getChangeAddress()];
+
       await getTokensAndBalance();
       await getChangeAddress();
+      await transferTokens(recepients, "0");
     } catch (error) {
+      throw error;
+    }
+  };
+
+  const getUtxos = async () => {
+    try {
+      const utxosRaw = await injectedWallet.getUtxos();
+      let utxos = utxosRaw.map(
+        (
+          utxo:
+            | WithImplicitCoercion<string>
+            | { [Symbol.toPrimitive](hint: "string"): string }
+        ) => TransactionUnspentOutput.from_bytes(Buffer.from(utxo, "hex"))
+      );
+
+      return utxos;
+    } catch (error) {
+      console.log("Error on getUtxos: ", error);
+      throw error;
+    }
+  };
+
+  const makeMultiAsset = (assets: any) => {
+    let AssetsMap: any = {};
+    for (let asset of assets) {
+      let [policy, assetName] = asset.unit.split(".");
+      let quantity = asset.quantity;
+      if (!Array.isArray(AssetsMap[policy])) {
+        AssetsMap[policy] = [];
+      }
+      AssetsMap[policy].push({
+        unit: Buffer.from(assetName, "ascii").toString("hex"),
+        quantity: quantity,
+      });
+    }
+
+    let multiAsset = MultiAsset.new();
+
+    for (const policy in AssetsMap) {
+      const scriptHash = ScriptHash.from_bytes(Buffer.from(policy, "hex"));
+      const assets = Assets.new();
+
+      const _assets = AssetsMap[policy];
+
+      for (const asset of _assets) {
+        const assetName = AssetName.new(Buffer.from(asset.unit, "hex"));
+        const bigNum = BigNum.from_str(asset.quantity.toString());
+
+        _assets.insert(assetName, bigNum);
+      }
+
+      multiAsset.insert(scriptHash, assets);
+    }
+
+    return multiAsset;
+  };
+
+  const makeOutputs = (recipients: string[]) => {
+    try {
+      let outputs = TransactionOutputs.new();
+
+      for (let recipient of recipients) {
+        let lovelace = Math.floor((recipient.amount || 0) * 1000000).toString();
+        let ReceiveAddress = recipient.address;
+        let multiAsset = makeMultiAsset(recipient?.assets || []);
+        let mintedAssets = [];
+
+        let outputValue = Value.new(BigNum.from_str(lovelace));
+        let minAdaMint = Value.new(BigNum.from_str("0"));
+
+        if ((recipient?.assets || []).length > 0) {
+          outputValue.set_multiasset(multiAsset);
+          let minAda = min_ada_required(
+            outputValue,
+            BigNum.from_str(protocolParameter.minUtxo)
+          );
+
+          if (BigNum.from_str(lovelace).compare(minAda) < 0)
+            outputValue.set_coin(minAda);
+        }
+        (recipient?.mintedAssets || []).map((asset) => {
+          minting += 1;
+          mintedAssetsArray.push({
+            ...asset,
+            address: recipient.address,
+          });
+        });
+
+        if (parseInt(outputValue.coin().to_str()) > 0) {
+          outputValues[recipient.address] = outputValue;
+        }
+        if ((recipient.mintedAssets || []).length > 0) {
+          minAdaMint = min_ada_required(
+            mintedAssets,
+            S.BigNum.from_str(protocolParameter.minUtxo)
+          );
+
+          let requiredMintAda = Value.new(BigNum.from_str("0"));
+          requiredMintAda.set_coin(minAdaMint);
+          if (outputValue.coin().to_str() == 0) {
+            outputValue = requiredMintAda;
+          } else {
+            outputValue = outputValue.checked_add(requiredMintAda);
+          }
+        }
+        if (ReceiveAddress != PaymentAddress)
+          costValues[ReceiveAddress] = outputValue;
+        outputValues[ReceiveAddress] = outputValue;
+        if (parseInt(outputValue.coin().to_str()) > 0) {
+          outputs.add(
+            TransactionOutput.new(
+              Address.from_bech32(ReceiveAddress),
+              outputValue
+            )
+          );
+        }
+      }
+
+      return outputs;
+    } catch (error) {
+      console.log("Error on makeOutputs: ", error);
+      throw error;
+    }
+  };
+
+  const transferTokens = async (recipients: string[], amount: string) => {
+    try {
+      const utxos = await getUtxos();
+      const txOutputs = makeOutputs(recipients);
+
+      const txBuilder = await initTransactionBuilder();
+      txBuilder.add_output(txOutputs);
+      txBuilder.add_inputs_from(utxos, 3);
+      const txBody = txBuilder.build();
+
+      let txVkeyWitnesses = await injectedWallet.signTx(
+        Buffer.from(txBody.to_bytes(), "utf8").toString("hex"),
+        true
+      );
+      txVkeyWitnesses = TransactionWitnessSet.from_bytes(
+        Buffer.from(txVkeyWitnesses, "hex")
+      );
+
+      const signedTx = Transaction.new(txBuilder.body(), transactionWitnessSet);
+
+      const submittedTxHash = await injectedWallet.submitTx(
+        Buffer.from(signedTx.to_bytes(), "utf8").toString("hex")
+      );
+
+      console.log("Submitted transaction: ", submittedTxHash);
+      return submittedTxHash;
+    } catch (error) {
+      console.log("Error on transferTokens: ", error);
       throw error;
     }
   };
@@ -131,6 +338,7 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     getChangeAddress,
     getTokensAndBalance,
     supportedWallets,
+    transferTokens,
   };
 };
 
