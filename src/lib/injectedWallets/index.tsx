@@ -10,7 +10,7 @@ import useInjectableWalletHook from "./hooks/useInjectableWalletHook";
 
 const InjectedWallets = () => {
   const { supportedWallets, connectWallet } = useInjectableWalletHook(
-    supportingInjectableWallets
+    supportingInjectableWallets, "5"
   );
 
   return (
