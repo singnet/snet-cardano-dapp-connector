@@ -19,3 +19,5 @@ export const HexToAscii = (
 export const fromCogs = (value: number, decimals: number) => {
   return new BigNumber(value).dividedBy(10 ** decimals).toString();
 };
+
+export const cardanoWalletExtensionError = 'WALLET_EXTENSION_NOT_FOUND';

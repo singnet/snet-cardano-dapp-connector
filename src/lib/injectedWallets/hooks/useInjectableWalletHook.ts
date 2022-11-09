@@ -17,9 +17,16 @@ import {
   TransactionUnspentOutputs,
   TransactionWitnessSet,
   Value,
+  TransactionOutput,
+  GeneralTransactionMetadata,
+  TransactionMetadatum,
+  MetadataMap,
 } from "@emurgo/cardano-serialization-lib-asmjs";
 import AssetFingerprint from "@emurgo/cip14-js";
-import { HexToAscii } from "../../../utils/functions";
+import {
+  HexToAscii,
+  cardanoWalletExtensionError,
+} from "../../../utils/functions";
 
 let injectedWallet: any = undefined;
 
@@ -38,8 +45,13 @@ const protocolParams = {
   coinsPerUtxoWord: "34482",
 };
 
-const useInjectableWalletHook = (supportingWallets: string[]) => {
+const useInjectableWalletHook = (
+  supportingWallets: string[],
+  expectedNetworkId: number | string
+) => {
   const [supportedWallets, setSupportedWallets] = useState<any[]>([]);
+  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
+  const [selectedNetwork, setSelectedNetwork] = useState<number | null>(null);
 
   const getSupportedWallets = (cardano: any) => {
     let wallets: string[] = [];
@@ -52,9 +64,8 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
       }
     });
 
-    console.log("Supported wallets: ", wallets);
-
     setSupportedWallets(wallets);
+    return wallets.length;
   };
 
   const detectCardanoInjectableWallets = () => {
@@ -65,12 +76,63 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
         throw new Error("Cardano wallet not found");
       }
 
-      console.log("SNET cardano dapp connector detected Cardano wallets");
-      console.log("Available APIs", cardano);
-
-      getSupportedWallets(cardano);
-    } catch (error: any) {
+      const isWalletsAvailable = getSupportedWallets(cardano);
+      return isWalletsAvailable;
+    } catch (error) {
       console.log(JSON.stringify(error));
+      throw error;
+    }
+  };
+
+  const getNetworkId = async () => {
+    try {
+      const networkId = await injectedWallet.getNetworkId();
+      return networkId;
+    } catch (error) {
+      console.log("Error on getNetworkId: ", error);
+      throw error;
+    }
+  };
+
+  const listenEvents = (cardano: any) => {
+    console.log("Listen events");
+
+    window.cardano.onNetworkChange((networkId: number) => {
+      console.log("Network changed: ", networkId);
+      setSelectedNetwork(networkId);
+    });
+
+    window.cardano.onAccountChange((addresses: string[]) => {
+      const changeAddress = Address.from_bytes(
+        Buffer.from(addresses[0], "hex")
+      ).to_bech32();
+      console.log("Account changed: ", changeAddress);
+      setSelectedWallet(changeAddress);
+    });
+  };
+
+  const connectWallet = async (walletName: string) => {
+    try {
+      const connectingWallet = toLower(walletName);
+      if (window.cardano && window.cardano.hasOwnProperty(connectingWallet)) {
+        injectedWallet = await window.cardano[connectingWallet].enable();
+      } else {
+        throw new Error(cardanoWalletExtensionError);
+      }
+
+      const currentNetworkId = await getNetworkId();
+      if (Number(currentNetworkId) !== Number(expectedNetworkId)) {
+        const error = `Invalid network selected please switch to ${
+          currentNetworkId ? "Testnet" : "Mainnet"
+        }`;
+        throw new Error(error);
+      }
+
+      listenEvents(injectedWallet);
+
+      return injectedWallet;
+    } catch (error) {
+      console.log("Error on connectWallet: ", error);
       throw error;
     }
   };
@@ -79,8 +141,12 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     detectCardanoInjectableWallets();
   }, []);
 
-  const getTokensAndBalance = async () => {
+  const getTokensAndBalance = async (walletIdentifier: string) => {
     try {
+      if (isNil(injectedWallet)) {
+        await connectWallet(walletIdentifier);
+      }
+
       const raw = await injectedWallet.getBalance();
       const value = Value.from_bytes(Buffer.from(raw, "hex"));
       const assets = [];
@@ -118,7 +184,6 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
         }
       }
 
-      console.log("Assets: ", assets);
       return assets;
     } catch (error: any) {
       console.log("Error on getTokensAndBalance: ", JSON.stringify(error));
@@ -126,9 +191,67 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     }
   };
 
+  const getBalanceByPolicyScriptId = async (
+    walletIdentifier: string,
+    policyScriptId: string
+  ) => {
+    const balances = await getTokensAndBalance(walletIdentifier);
+    const balance = balances.find(
+      (balance) => balance.policy === policyScriptId
+    );
+    return balance;
+  };
+
+  const getUsedAddresses = async () => {
+    try {
+      const raw = await injectedWallet.getUsedAddresses();
+      const usedAddresses = raw.map((address: string) => {
+        return Address.from_bytes(Buffer.from(address, "hex")).to_bech32();
+      });
+
+      console.log("Used addresses: ", usedAddresses);
+
+      return usedAddresses[0];
+    } catch (error) {
+      console.log("Error on getUsedAddresses: ", JSON.stringify(error));
+      throw error;
+    }
+  };
+
+  const getRewardAddresses = async () => {
+    try {
+      const raw = await injectedWallet.getRewardAddresses();
+      const rewardAddressess = raw.map((address: string) => {
+        return Address.from_bytes(Buffer.from(address, "hex")).to_bech32();
+      });
+
+      console.log("rewardAddressess: ", rewardAddressess);
+    } catch (error) {
+      console.log("Error on getRewardAddresses: ", JSON.stringify(error));
+    }
+  };
+
+  const getUnusedAddresses = async () => {
+    try {
+      const raw = await injectedWallet.getUnusedAddresses();
+      const unusedAddressess = raw.map((address: string) => {
+        return Address.from_bytes(Buffer.from(address, "hex")).to_bech32();
+      });
+
+      console.log("unusedAddressess: ", unusedAddressess);
+    } catch (error) {
+      console.log("Error on getUnusedAddresses: ", JSON.stringify(error));
+    }
+  };
+
   const getChangeAddress = async () => {
     try {
       const raw = await injectedWallet.getChangeAddress();
+
+      await getUsedAddresses();
+      await getRewardAddresses();
+      await getUnusedAddresses();
+
       const changeAddress = Address.from_bytes(
         Buffer.from(raw, "hex")
       ).to_bech32();
@@ -161,16 +284,6 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     return txBuilder;
   };
 
-  const connectWallet = async (walletName: string) => {
-    try {
-      const connectingWallet = toLower(walletName);
-      console.log("Connecting wallet: ", connectingWallet);
-      injectedWallet = await window.cardano[connectingWallet].enable();
-    } catch (error) {
-      throw error;
-    }
-  };
-
   const getUtxos = async () => {
     try {
       const utxosRaw = await injectedWallet.getUtxos();
@@ -190,8 +303,8 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
   };
 
   const getTxUnspentOutputs = async () => {
-    let txOutputs = TransactionUnspentOutputs.new();
-    const utxos: any = await getUtxos();
+    const txOutputs = TransactionUnspentOutputs.new();
+    const utxos = await getUtxos();
     for (const utxo of utxos) {
       txOutputs.add(utxo);
     }
@@ -199,12 +312,14 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
   };
 
   const transferTokens = async (
+    walletName: string,
     transferWalletAddress: string,
     assetPolicyIdHex: string,
     assetNameHex: string,
     assetQuantity: string
   ) => {
     try {
+      await connectWallet(walletName);
       const txBuilder = await initTransactionBuilder();
       const changeAddress = await getChangeAddress();
       const shelleyOutputAddress = Address.from_bech32(transferWalletAddress);
@@ -214,8 +329,8 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
       txOutputBuilder = txOutputBuilder.with_address(shelleyOutputAddress);
       txOutputBuilder = txOutputBuilder.next();
 
-      let multiAsset = MultiAsset.new();
-      let assets = Assets.new();
+      const multiAsset = MultiAsset.new();
+      const assets = Assets.new();
       assets.insert(
         AssetName.new(Buffer.from(assetNameHex, "hex")), // Asset Name
         BigNum.from_str(assetQuantity) // How much to send
@@ -242,7 +357,7 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
       txBuilder.add_change_if_needed(shelleyChangeAddress);
 
       // once the transaction is ready, we build it to get the tx body without witnesses
-      const txBody = txBuilder.build();
+      const txBody = await txBuilder.build();
 
       // Tx witness
       const transactionWitnessSet = TransactionWitnessSet.new();
@@ -275,12 +390,112 @@ const useInjectableWalletHook = (supportingWallets: string[]) => {
     }
   };
 
+  const transferTokensWithMatadata = async (
+    walletName: string,
+    transferWalletAddress: string,
+    assetQuantity: string,
+    matadata: any
+  ) => {
+    try {
+      await connectWallet(walletName);
+      const txBuilder = await initTransactionBuilder();
+      const changeAddress = await getChangeAddress();
+      const shelleyOutputAddress = Address.from_bech32(transferWalletAddress);
+      const shelleyChangeAddress = Address.from_bech32(changeAddress);
+
+      const map = MetadataMap.new();
+      const r = matadata.signature.slice(0, 64);
+      const s = matadata.signature.slice(64, 128);
+      const v = matadata.signature.slice(128, 130);
+      const r1 = matadata.registrationId.slice(0, 64);
+      const r2 = matadata.registrationId.slice(64, 88);
+
+      map.insert(
+        TransactionMetadatum.new_text("s1"),
+        TransactionMetadatum.new_text(r)
+      );
+      map.insert(
+        TransactionMetadatum.new_text("s2"),
+        TransactionMetadatum.new_text(s)
+      );
+      map.insert(
+        TransactionMetadatum.new_text("s3"),
+        TransactionMetadatum.new_text(v)
+      );
+      map.insert(
+        TransactionMetadatum.new_text("wid"),
+        TransactionMetadatum.new_text(matadata.airdropWindowId)
+      );
+      map.insert(
+        TransactionMetadatum.new_text("r1"),
+        TransactionMetadatum.new_text(r1)
+      );
+      map.insert(
+        TransactionMetadatum.new_text("r2"),
+        TransactionMetadatum.new_text(r2)
+      );
+      const metadatum = TransactionMetadatum.new_map(map);
+      const generalMatadata = GeneralTransactionMetadata.new();
+      generalMatadata.insert(BigNum.from_str("1"), metadatum);
+
+      txBuilder.set_metadata(generalMatadata);
+
+      txBuilder.add_output(
+        TransactionOutput.new(
+          shelleyOutputAddress,
+          Value.new(BigNum.from_str(assetQuantity.toString()))
+        )
+      );
+      // Find the available UTXOs in the wallet and
+      // us them as Inputs
+      const txUnspentOutputs = await getTxUnspentOutputs();
+      txBuilder.add_inputs_from(txUnspentOutputs, 0);
+
+      // calculate the min fee required and send any change to an address
+      txBuilder.add_change_if_needed(shelleyChangeAddress);
+      // once the transaction is ready, we build it to get the tx body without witnesses
+      const tx: any = txBuilder.build_tx();
+      const transactionWitnessSet = TransactionWitnessSet.new();
+
+      let txVkeyWitnesses = await injectedWallet.signTx(
+        Buffer.from(tx.to_bytes(), "utf8").toString("hex"),
+        true
+      );
+      txVkeyWitnesses = TransactionWitnessSet.from_bytes(
+        Buffer.from(txVkeyWitnesses, "hex")
+      );
+
+      transactionWitnessSet.set_vkeys(txVkeyWitnesses.vkeys());
+
+      const signedTx: any = Transaction.new(
+        tx.body(),
+        transactionWitnessSet,
+        tx.auxiliary_data()
+      );
+
+      const submittedTxHash = await injectedWallet.submitTx(
+        Buffer.from(signedTx.to_bytes(), "utf8").toString("hex")
+      );
+
+      return submittedTxHash;
+    } catch (error) {
+      console.log("Error on transferToken: ", error);
+      throw error;
+    }
+  };
+
   return {
     connectWallet,
     getChangeAddress,
     getTokensAndBalance,
     supportedWallets,
     transferTokens,
+    transferTokensWithMatadata,
+    detectCardanoInjectableWallets,
+    getBalanceByPolicyScriptId,
+    getUsedAddresses,
+    selectedWallet,
+    selectedNetwork,
   };
 };
 
