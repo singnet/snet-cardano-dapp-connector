@@ -23,10 +23,7 @@ import {
   MetadataMap,
 } from "@emurgo/cardano-serialization-lib-asmjs";
 import AssetFingerprint from "@emurgo/cip14-js";
-import {
-  HexToAscii,
-  cardanoWalletExtensionError,
-} from "../../../utils/functions";
+import { HexToAscii, cardanoWalletExtensionError } from "./functions";
 
 let injectedWallet: any = undefined;
 

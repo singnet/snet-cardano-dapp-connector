@@ -5,8 +5,8 @@ import {
   ListItemButton,
   ListItemText,
 } from "@mui/material";
-import { supportingInjectableWallets } from "../../utils/supportedWallets";
-import useInjectableWalletHook from "./hooks/useInjectableWalletHook";
+import { supportingInjectableWallets } from "../utils/supportedWallets";
+import useInjectableWalletHook from "../lib/useInjectableWalletHook";
 
 const InjectedWallets = () => {
   const { supportedWallets, connectWallet } = useInjectableWalletHook(
@@ -15,7 +15,7 @@ const InjectedWallets = () => {
 
   return (
     <List dense>
-      {supportedWallets.map((wallet) => {
+      {supportedWallets.map((wallet : any) => {
         return (
           <ListItem
             sx={{ borderBottom: "1px solid #f6f6f6" }}
