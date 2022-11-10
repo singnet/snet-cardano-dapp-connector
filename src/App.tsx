@@ -1,4 +1,4 @@
-import Connector from "./lib/connector";
+import Connector from "./connector";
 
 const App = () => {
   return <Connector />;
