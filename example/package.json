@@ -1,0 +1,25 @@
+{
+  "name": "snet-cardano-dapp-connector-example",
+  "homepage": "https://Shyam-Khokhariya.github.io/snet-cardano-dapp-connector",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "snet-cardano-dapp-connector": "file:..",
+    "react": "file:../node_modules/react",
+    "react-dom": "^16.9.0",
+    "react-scripts": "^3.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject"
+  },
+  "browserslist": [
+    ">0.2%",
+    "not dead",
+    "not ie <= 11",
+    "not op_mini all"
+  ]
+}
