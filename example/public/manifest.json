@@ -1,6 +1,6 @@
 {
-  "short_name": "snet-cardano-dapp-connector",
-  "name": "snet-cardano-dapp-connector",
+  "short_name": "snet-cardano-dapp-connector-example",
+  "name": "snet-cardano-dapp-connector-example",
   "start_url": "./index.html",
   "display": "standalone",
   "theme_color": "#000000",

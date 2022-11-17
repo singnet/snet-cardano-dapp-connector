@@ -1,6 +1,6 @@
 # snet-cardano-dapp-connector
 
-> This is a testing package
+> This package is for connecting to cardano wallets and transfering the ADA.
 
 [![NPM](https://img.shields.io/npm/v/snet-cardano-dapp-connector.svg)](https://www.npmjs.com/package/snet-cardano-dapp-connector) [![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
 
