@@ -1,10 +1,10 @@
 {
   "name": "snet-cardano-dapp-connector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Snet SDK for connecting cardano wallet",
-  "author": "Shyam-Khokhariya",
+  "author": "singnet",
   "license": "MIT",
-  "repository": "Shyam-Khokhariya/snet-cardano-dapp-connector",
+  "repository": "singnet/snet-cardano-dapp-connector",
   "main": "dist/index.js",
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
@@ -50,5 +50,11 @@
     "rollup-plugin-peer-deps-external": "^2.2.0",
     "tslib": "^2.0.1",
     "typescript": "^3.2.4"
-  }
+  },
+  "keywords": [
+    "cardano",
+    "snet",
+    "dapp-connector",
+    "snet-cardano-dapp-connector"
+  ]
 }
