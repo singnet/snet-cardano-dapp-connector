@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toLower, isNil } from "lodash";
 import {
   Address,
@@ -154,10 +154,6 @@ export const useInjectableWalletHook = (
       throw error;
     }
   };
-
-  useEffect(() => {
-    detectCardanoInjectableWallets();
-  }, []);
 
   const getTokensAndBalance = async (walletIdentifier: string) => {
     try {
