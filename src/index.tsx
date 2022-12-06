@@ -52,8 +52,6 @@ export const useInjectableWalletHook = (
   expectedNetworkId: number | string
 ) => {
   const [supportedWallets, setSupportedWallets] = useState<any[]>([]);
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
-  const [selectedNetwork, setSelectedNetwork] = useState<number | null>(null);
 
   const HexToBuffer = (
     string:
@@ -112,23 +110,6 @@ export const useInjectableWalletHook = (
     }
   };
 
-  const listenEvents = () => {
-    console.log("Listen events");
-
-    window.cardano.onNetworkChange((networkId: number) => {
-      console.log("Network changed: ", networkId);
-      setSelectedNetwork(networkId);
-    });
-
-    window.cardano.onAccountChange((addresses: string[]) => {
-      const changeAddress = Address.from_bytes(
-        Buffer.from(addresses[0], "hex")
-      ).to_bech32();
-      console.log("Account changed: ", changeAddress);
-      setSelectedWallet(changeAddress);
-    });
-  };
-
   const connectWallet = async (walletName: string) => {
     try {
       const connectingWallet = toLower(walletName);
@@ -145,8 +126,6 @@ export const useInjectableWalletHook = (
         }`;
         throw new Error(error);
       }
-
-      listenEvents();
 
       return injectedWallet;
     } catch (error) {
@@ -211,7 +190,7 @@ export const useInjectableWalletHook = (
   ) => {
     const balances = await getTokensAndBalance(walletIdentifier);
     const balance = balances.find(
-      (balance : any) => balance.policy === policyScriptId
+      (balance: any) => balance.policy === policyScriptId
     );
     return balance;
   };
@@ -508,7 +487,5 @@ export const useInjectableWalletHook = (
     detectCardanoInjectableWallets,
     getBalanceByPolicyScriptId,
     getUsedAddresses,
-    selectedWallet,
-    selectedNetwork,
   };
 };

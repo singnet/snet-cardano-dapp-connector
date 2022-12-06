@@ -1,6 +1,6 @@
 {
   "name": "snet-cardano-dapp-connector",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Snet SDK for connecting cardano wallet",
   "author": "singnet",
   "license": "MIT",
