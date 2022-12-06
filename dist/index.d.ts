@@ -13,6 +13,4 @@ export declare const useInjectableWalletHook: (supportingWallets: string[], expe
     detectCardanoInjectableWallets: () => number;
     getBalanceByPolicyScriptId: (walletIdentifier: string, policyScriptId: string) => Promise<any>;
     getUsedAddresses: () => Promise<any>;
-    selectedWallet: string | null;
-    selectedNetwork: number | null;
 };
